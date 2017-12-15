@@ -1,0 +1,321 @@
+rm(list = ls(all= TRUE))
+#Loading required libraries
+# install.packages("zoo")
+# install.packages("quantmod")
+# install.packages("tseries")
+# install.packages("timeSeries")
+# install.packages("forecast")
+#library(quantmod)
+#library(quantreg)
+#library(Quandl)
+library("forecast")
+library("stats")
+#library("data.table")
+library("xts")
+#library(DMwR)
+library(tseries)
+#library(plyr)
+#library(dplyr)
+#library(jpeg)
+#library(ggplot2)
+#library(stocks)
+#library(tseries)
+library(lpSolve)
+library("zoo")
+#library("tseries")
+library("timeSeries")
+#library("xts")
+options(warn = -1)
+setwd("C:\\Users\\Sulochana Roy\\Desktop\\StockMarketDatasets")
+ASIANPAINT.NS <- read.csv("ASIANPAINT.NS.csv")
+HDFCBANK.NS <- read.csv("HDFCBANK.NS.csv")
+HINDUNILVR.NS <- read.csv("HINDUNILVR.NS.csv")
+INFY.NS <- read.csv("INFY.NS.csv")
+ITC.NS <- read.csv("ITC.NS.csv")
+LT.NS <- read.csv("LT.NS.csv")
+MARUTI.NS <- read.csv("MARUTI.NS.csv")
+RELIANCE.NS <- read.csv("RELIANCE.NS.csv")
+TCS.NS <- read.csv("TCS.NS.csv")
+KOTAKBANK.NS <- read.csv("KOTAKBANK.NS.csv")
+
+#Creating a Data Table to store MAPE values
+colClasses = c("character", "double", "double")
+col.names = c("Stockname", "HoltWinters", "AutoArima")
+
+MAPE_Table <- read.table(text = "",
+                         colClasses = colClasses,
+                         col.names = col.names)
+
+#Creating a list of all the Stocks for looping
+StockList <- list(ASIANPAINT.NS = ASIANPAINT.NS, HDFCBANK.NS = HDFCBANK.NS, HINDUNILVR.NS = HINDUNILVR.NS, 
+                  INFY.NS = INFY.NS,ITC.NS = ITC.NS,
+                  LT.NS = LT.NS, MARUTI.NS = MARUTI.NS,
+                  RELIANCE.NS = RELIANCE.NS,TCS.NS = TCS.NS,KOTAKBANK.NS = KOTAKBANK.NS)
+
+#Creating a List of Pre-processed data frames
+ModelDataList <- list()
+
+#Calculating and storing MAPE values for HoltWinters and ARIMA
+for (i in 1:length(StockList)){
+  
+  MAPE_Table [i,1] <- names(StockList)[i]
+  #Selecting the Date and Stock Open values into a data frame for forecasting
+  Open <- StockList[[i]][,2]
+  Date <- StockList[[i]][,1]
+  Date <- as.Date(Date)
+  Stock <- data.frame(Date,Open)
+  
+  #Generating the dates sequentially for the Input Stock
+  allDates <- seq.Date(Stock$Date[1], Stock$Date[3216],"day")
+  
+  #Merging the sequential dates generated with the dataset
+  StockValues <- merge( x=data.frame(Date=allDates),y=Stock,
+                        all.x=TRUE)
+  
+  #Imputing the missing values using the Zoo package
+  zooValues <- zoo(StockValues$Open,StockValues$Date)
+  ModelData <- na.approx(zooValues)
+  ModelDataList[i] <- as.data.frame.AsIs(ModelData)
+  
+  #Splitting Data into Test and Train
+  StockTS <- ts(ModelData[,1], frequency = 365)
+  StockTS_train = ts(StockTS[1:4741], frequency = 365)  
+  StockTS_test = ts(StockTS[4742:4748], frequency = 365)
+  
+  #HoltWinters Model
+  Stock_HW <-  HoltWinters(StockTS_train) 
+  
+  #Forecasting using Holt-Winters
+  Stock_forecast_HW <- forecast.HoltWinters(Stock_HW,h= 7)
+  
+  
+  #Calculating MAPE for the Given stock
+  Stock_forecast_HW_mean <- Stock_forecast_HW$mean
+  Stock_forecast_HW_mean <- as.vector(Stock_forecast_HW_mean)
+  StockTS_test <- as.vector(StockTS_test)
+  MAPE_test_HW <- mean(abs(StockTS_test - Stock_forecast_HW_mean )
+                       /abs(StockTS_test))*100
+  
+  #Assigning the MAPE values to a table
+  MAPE_Table [i,2]<-MAPE_test_HW
+  
+  #Build ARIMA model
+  LogARIMA <- auto.arima(log10(StockTS_train))
+  
+  # Forecast Stock value
+  Forecasts <- forecast.Arima(LogARIMA, h=7)
+  
+  #MAPE Calculation
+  Forecasts_mean <- Forecasts$mean
+  Forecasts_mean <-as.vector(10^(Forecasts_mean)) 
+  StockTS_test <- as.vector(StockTS_test)
+  MAPE_test_AutoArima <- mean(abs(StockTS_test - Forecasts_mean)/abs(StockTS_test))*100
+  
+  #Assigning the MAPE values to a table
+  MAPE_Table [i,3]<-MAPE_test_AutoArima
+}
+
+
+########################## PLOTTING ###############################
+# Function to Plot the Components
+ComponentsPlot <- function (Stock_DF){
+  Data <- data.frame(Stock_DF)
+  StockTS <- ts(Data, frequency = 365)
+  Components <- decompose(StockTS, type = "multiplicative")
+  plot(Components)
+  return(StockTS)
+}
+
+#Function to Plot ACF and PACF
+ACF_PACF_Plot <- function(StockTS,name){
+  par(mfrow = c(1,3))
+  plot(StockTS, xlab="Years", ylab = name)
+  acf(StockTS,main=name)
+  pacf(StockTS,main=name)
+}
+
+
+#Function to plot HoltWinters Forecast
+HoltWinters_Plot <- function(Stock_DF){
+  par(mfrow = c(1,1))
+  StockTS <- ts(Stock_DF[,1], frequency = 365)
+  StockTS_train = ts(StockTS[1:4741], frequency = 365)  
+  StockTS_test = ts(StockTS[4742:4748], frequency = 365)
+  
+  ## Holt Winters model
+  Stock_HW <-  HoltWinters(StockTS_train)
+  
+  #Forecasting
+  Stock_forecast_HW <- 
+    forecast.HoltWinters(Stock_HW,h= 7)
+  
+  #Plotting the forecast
+  plot.forecast(Stock_forecast_HW,shadecols="oldstyle")
+}
+
+#Function to plot Arima Forecast
+AutoArima_Plot <- function(Stock_DF){
+  
+  par(mfrow = c(1,1))
+  StockTS <- ts(Stock_DF[,1], frequency = 365)
+  StockTS_train = ts(StockTS[1:4741], frequency = 365)  
+  StockTS_test = ts(StockTS[4742:4748], frequency = 365)
+  ## AutoArima model
+LogARIMA <- auto.arima(log10(StockTS_train))
+
+  #Forecasting
+  Stock_forecast_Arima <- 
+    forecast.Arima(LogARIMA,h= 7)
+
+  
+  #Plotting the forecast
+  plot.forecast(Stock_forecast_Arima,shadecols="oldstyle")
+}
+
+#Running all the functions for all the stocks for plotting
+nameASIANPAINT <- names(StockList)[1]
+ASIANPAINTts <-ComponentsPlot(ModelDataList[1])
+ACF_PACF_Plot(ASIANPAINTts,nameASIANPAINT)
+HoltWinters_Plot(ASIANPAINTts)
+AutoArima_Plot(ASIANPAINTts)
+
+nameHDFCBANK <- names(StockList)[2]
+HDFCBANKts <-ComponentsPlot(ModelDataList[2])
+ACF_PACF_Plot(HDFCBANKts,nameHDFCBANK)
+HoltWinters_Plot(HDFCBANKts)
+AutoArima_Plot(HDFCBANKts)
+
+nameHINDUNILVR <- names(StockList)[3]
+HINDUNILVRts <-ComponentsPlot(ModelDataList[3])
+ACF_PACF_Plot(HINDUNILVRts ,nameHINDUNILVR)
+HoltWinters_Plot(HINDUNILVRts)
+AutoArima_Plot(HINDUNILVRts)
+
+nameINFY <- names(StockList)[4]
+INFYts <-ComponentsPlot(ModelDataList[4])
+ACF_PACF_Plot(INFYts,nameINFY)
+HoltWinters_Plot(INFYts)
+AutoArima_Plot(INFYts)
+
+nameITC <- names(StockList)[5]
+ITCts <-ComponentsPlot(ModelDataList[5])
+ACF_PACF_Plot(ITCts,nameITC)
+HoltWinters_Plot(ITCts)
+AutoArima_Plot(ITCts)
+
+
+nameLT <- names(StockList)[6]
+LTts <-ComponentsPlot(ModelDataList[6])
+ACF_PACF_Plot(LTts,nameLT)
+HoltWinters_Plot(LTts)
+AutoArima_Plot(LTts)
+
+
+nameMARUTI <- names(StockList)[7]
+MARUTIts <-ComponentsPlot(ModelDataList[7])
+ACF_PACF_Plot(MARUTIts,nameMARUTI)
+HoltWinters_Plot(MARUTIts)
+AutoArima_Plot(MARUTIts)
+
+nameRELIANCE <- names(StockList)[8]
+RELIANCEts <-ComponentsPlot(ModelDataList[8])
+ACF_PACF_Plot(RELIANCEts,nameRELIANCE)
+HoltWinters_Plot(RELIANCEts)
+AutoArima_Plot(RELIANCEts)
+
+nameTCS <- names(StockList)[9]
+TCSts <-ComponentsPlot(ModelDataList[9])
+ACF_PACF_Plot(TCSts,nameTCS)
+HoltWinters_Plot(TCSts)
+AutoArima_Plot(TCSts)
+
+nameKOTAKBANK <- names(StockList)[10]
+KOTAKBANKts <-ComponentsPlot(ModelDataList[10])
+ACF_PACF_Plot(KOTAKBANKts,nameKOTAKBANK)
+HoltWinters_Plot(KOTAKBANKts)
+AutoArima_Plot(KOTAKBANKts)
+
+####################################################################
+######################OPTIMIZATION#################################
+####################################################################
+
+#Creating a table to store yearly returns
+
+colClasses = c("character", "double")
+col.names = c("Stockname", "Returns")
+
+Returns_Table <- read.table(text = "",
+                            colClasses = colClasses,
+                            col.names = col.names)
+#List of all the stocks
+StockList <- list(ASIANPAINT.NS = ASIANPAINT.NS, HDFCBANK.NS = HDFCBANK.NS, HINDUNILVR.NS = HINDUNILVR.NS, INFY.NS = INFY.NS, ITC.NS = ITC.NS,
+                   LT.NS = LT.NS, MARUTI.NS = MARUTI.NS,
+                  RELIANCE.NS = RELIANCE.NS,TCS.NS = TCS.NS,KOTAKBANK.NS = KOTAKBANK.NS)
+
+for (i in 1:length(StockList)){
+  
+  Returns_Table [i,1] <- names(StockList)[i]
+
+   Open <- xts(ModelDataList[[i]][,1])
+  
+  #Calculating Mean Yearly Return
+  #Return = mean(yearlyReturn(Open))
+  
+  #Storing the results in the table
+  #Returns_Table [i,2]<- Return
+}
+
+# X1 -> Amount to be invested in KOTAKBANK
+# X2 -> Amount to be invested in MARUTI
+# X3 -> Amount to be invested in ASIANPAINT
+# X4 -> Amount to be invested in LT
+# X5 -> Amount to be invested in RELIANCE
+# 
+# Stock	Yearly ReturnS
+# KOTAKBANK	    0.5154
+# MARUTI	      0.3563
+# ASIANPAINT	  0.3516
+# LT		        0.3444
+# RELIANCE		  0.3037
+# 
+# Optimization function
+# MAX Z: 0.5154*X1 + 0.3563*X2 + 0.3516*X3 + 0.3444*X4 + 0.3037*X5
+# 
+# Total Amount to be invested : 10000
+# X1+X2+X3+X4+X5 = 10000
+# 
+# Constaints:
+#   No more than 25% should be invested in any single stock
+# X1 <= 2500
+# X2 <= 2500
+# X3 <= 2500
+# X4 <= 2500
+# X5 <= 2500
+# 
+# More than 50% to be invested in TOP 2 stocks
+# X1 + X2 >= 500
+# Less than 40% to be invested in LAST 2 stocks
+# X4 + X5 <= 400
+# 
+# 
+# Non-negativity Constaints
+# X1,X2,X3,X4,x5 >= 0
+
+library("lpSolve")
+
+obj=c(0.5154,0.3563,0.3516,0.3444,0.3037)
+
+con=rbind(c(1,0,0,0,0), 
+          c(0,1,0,0,0), 
+         c(0,0,1,0,0), 
+        c(0,0,0,1,0), 
+       c(0,0,0,0,1), 
+      c(1,1,1,1,1))
+
+dir=c(">=", ">=", ">=", ">=", ">=", "=")
+
+rhs=c(1000, 1000, 1000, 1000, 1000, 6000)
+
+res=lp("max", obj, con, dir, rhs, compute.sens=1)
+res$solution
+
