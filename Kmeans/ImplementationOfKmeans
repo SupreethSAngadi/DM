@@ -1,0 +1,115 @@
+library(ggplot2)
+setwd("C:/Users/Sadhana Ravoori/Desktop/Kmeans Implementation") 
+prc <- read.csv("indian_liver_patient1.csv",stringsAsFactors = FALSE)
+stringsAsFactors = FALSE
+str(prc)
+prc
+
+#DATA PRE-PROCESSING BEGIN
+
+#Missing values filled by imputed values
+prc$Albumin_and_Globulin_Ratio <- ifelse(is.na(prc$Albumin_and_Globulin_Ratio),prc$Albumin/(prc$Total_Protiens-prc$Albumin),prc$Albumin_and_Globulin_Ratio) 
+prc$Albumin_and_Globulin_Ratio
+
+#Changing categorical values to numerical GENDER Male=0 Female=1
+prc$Gender <- ifelse(prc$Gender=='Male',0,1)
+prc$Gender
+
+#Removing Outliers
+xxx<-which(prc$Albumin==5.5)
+xxx
+prc<-prc[-c(244,373),]
+nrow(prc)
+
+xxx<-which(prc$Aspartate_Aminotransferase>2500)
+xxx
+prc<-prc[-c(118,136),]
+nrow(prc)
+
+xxx<-which(prc$Total_Bilirubin>40)
+xxx
+prc<-prc[-c(165,556),]
+nrow(prc)
+
+xxx<-which(prc$Direct_Bilirubin>15)
+xxx
+prc<-prc[-c(500,527),]
+nrow(prc)
+
+
+#Normalization 
+normalize<-function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) }
+
+prc_n <- as.data.frame(lapply(prc[1:10], normalize))
+prc_n
+#DATA PREPROCESSING DONE
+
+
+#FIRST INFERENCE
+#Finding the correlation between AGE and other ATTRIBUTES
+cor(prc$Age,prc$Total_Bilirubin)
+cor(prc$Age,prc$Direct_Bilirubin)
+cor(prc$Age,prc$Alkaline_Phosphotase)
+cor(prc$Age,prc$Alamine_Aminotransferase)
+cor(prc$Age,prc$Aspartate_Aminotransferase)
+cor(prc$Age,prc$Total_Protiens)
+cor(prc$Age,prc$Albumin)
+cor(prc$Age,prc$Albumin_and_Globulin_Ratio)
+
+#Applying K-Means on positively correlated attributes
+inf1<-kmeans(prc_n[1:7],centers=2)
+inf1
+
+#Plot the graph between x=Age and any Y
+ggplot(prc_n, aes(prc$Age, prc$Total_Bilirubin, color = inf1$cluster)) + geom_point() + ggtitle('Correlation between Age and other Attributes')
+
+#First Inference = Age isnt a factor
+
+#SECOND INFERENCE
+#Applying K-Means 
+inf4<-kmeans(prc_n[2:9],centers=2)
+inf4$centers
+
+
+ggplot(prc_n, aes(prc$Total_Protiens, prc$Albumin, color = inf4$cluster)) + geom_point() + ggtitle('Range of Albumin and Total Proteins')
+
+#Second Inference = Normal range of Albumin and Total Proteins
+
+#THIRD INFERENCE
+#Separting Male and Female
+f<-subset(prc,prc$Gender==1)
+f_n<-subset(prc_n,prc_n$Gender==1)
+nrow(f)
+
+m<-subset(prc,prc$Gender==0)
+m_n<-subset(prc_n,prc_n$Gender==0)
+nrow(m)
+
+#Applying K-Means
+ans1<-kmeans(f_n[2:9],centers=2)
+ans1$centers
+ggplot(f, aes(f$Age, f$Alkaline_Phosphotase, color = ans1$cluster)) + geom_point() + ggtitle('Alkaline Phosphotase in Women')
+
+ans2<-kmeans(m_n[2:9],centers=2)
+ans2$centers
+ggplot(m, aes(m$Age, m$Alkaline_Phosphotase, color = ans2$cluster)) + geom_point() + ggtitle('Alkaline Phosphotase in Men')
+
+ans<-kmeans(prc_n[2:9],centers=2)
+ans$centers
+ggplot(prc_n, aes(prc$Age, prc$Alkaline_Phosphotase, color = ans$cluster)) + geom_point() + ggtitle('Alkaline Phosphotase level')
+
+#Third Inference = Elevated levels of Alkaline Phosphotase does not mean Liver Disease
+
+
+#FOURTH INFERENCE
+#Applying K-Means
+ans<-kmeans(f_n[2:9],centers=2)
+ans$centers
+ggplot(f, aes(f$Age, f$Aspartate_Aminotransferase, color = ans$cluster)) + geom_point() + ggtitle('Aspartate Aminotransfarase in Women')
+
+ans1<-kmeans(m_n[2:9],centers=2)
+ans1$centers
+ggplot(m, aes(m$Age,m$Aspartate_Aminotransferase, color = ans1$cluster)) + geom_point() + ggtitle('Aspartate Aminotransfarase in Men')
+
+#Fourth Inference = Elevated levels of Aspartate Aminotransferase occur generally in men as a result of alcohol abuse
