@@ -1,0 +1,10 @@
+select_attr.py : cleaning script.
+dt.dot : classification rules.
+rms.png, acc.png, tree.png : error, accuracy plots and the decision tree generated.
+model.py : builds the classifier. ( run this first)
+accc_vis.py : used to visualize the rms and acc values.
+
+use webgraphviz (http://webgraphviz.com/) to generate the tree from dt.dot file. 
+
+
+link to dataset : https://www.kaggle.com/cdc/mortality
